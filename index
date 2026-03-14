@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gym Tracker App</title>
+
+    <!-- PWA MANIFEST (Incrustado para instalación) -->
+    <link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Gym Tracker","short_name":"GymTracker","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#4f46e5","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/2964/2964514.png","sizes":"512x512","type":"image/png"}]}'>
+
+    <!-- Configuración iOS (Safari) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GymTracker">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2964/2964514.png">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SortableJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        button { touch-action: manipulation; }
+        input:focus, select:focus, textarea:focus { outline: 2px solid #4f46e5; outline-offset: -1px; }
+        .sortable-ghost { opacity: 0.4; background-color: #e0e7ff; }
+        .drag-handle { cursor: grab; touch-action: none; }
+        /* Ajuste para Notch en iPhone */
+        body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-6 select-none text-gray-800">
+
+    <div class="max-w-md mx-auto min-h-screen flex flex-col bg-gray-50 shadow-2xl overflow-hidden sm:rounded-xl sm:my-4 sm:min-h-0 sm:h-[90vh]">
+
+        <!-- Header -->
+        <header class="bg-white p-4 pb-2 shadow-sm z-10">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-black text-gray-900 flex items-center tracking-tight">
+                    <span class="bg-indigo-600 text-white p-1.5 rounded-lg mr-2 text-lg shadow">💪</span>
+                    GYM TRACKER
+                </h1>
+
+                <div class="relative">
+                    <button onclick="window.toggleMenu()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+                    </button>
+                    <div id="app-menu" class="hidden absolute right-0 top-10 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50">
+                        <button onclick="window.toggleFullScreen()" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50">
+                            <span>⛶</span> Pantalla Completa
+                        </button>
+                        <div class="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 border-y border-gray-100">Rutina Actual</div>
+                        <button onclick="window.cloneCurrentProgram()" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50">
+                            <span>🧬</span> Clonar rutina
+                        </button>
+                        <button onclick="window.downloadBackup()" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                            <span>📥</span> Guardar Copia (Backup)
+                        </button>
+                        <label class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer border-t border-gray-100">
+                            <span>📤</span> Restaurar Copia
+                            <input type="file" id="restore-file" onchange="window.restoreBackup(event)" class="hidden" accept=".json">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span id="program-name-display" class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tu Rutina</span>
+                    <input type="text" id="program-name-input" onblur="window.saveProgramName()" onkeydown="window.handleProgramNameKeypress(event)" class="hidden text-[10px] font-bold uppercase tracking-wider bg-transparent border-b border-indigo-600 focus:outline-none text-gray-700" />
+                    <div id="active-status-container" class="flex items-center">
+                        <span id="badge-active" class="hidden bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-yellow-200 flex items-center gap-1">⭐ ACTIVA</span>
+                        <button id="btn-make-active" onclick="window.setProgramActive()" class="hidden bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full hover:bg-gray-300">Marcar Activa</button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <select id="program-selector" onchange="window.handleProgramChange(event)" class="w-full bg-transparent font-bold text-gray-800 text-base border-none p-0 focus:ring-0 truncate cursor-pointer">
+                        <option>Cargando...</option>
+                    </select>
+                    <div class="flex items-center gap-1 border-l border-gray-200 pl-2">
+                        <button onclick="window.deleteCurrentProgram()" class="p-2 rounded-lg text-red-400 hover:bg-red-50 transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                        <button onclick="window.editProgramName()" class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition" title="Editar nombre de rutina"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                        <button onclick="window.openNewProgramModal()" class="bg-white p-2 rounded-lg text-indigo-600 shadow-sm border border-gray-100"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="bg-white px-4 pb-2 border-b border-gray-100 shadow-sm z-0">
+            <div id="days-navigation" class="flex items-center overflow-x-auto no-scrollbar gap-2 py-1"></div>
+        </div>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4 pb-12 relative">
+            <div class="flex justify-between items-center mb-6 gap-2">
+                <div class="flex-1 mr-2">
+                    <h2 id="routine-title-display" onclick="window.editDayName()" class="text-2xl font-black text-gray-800 cursor-pointer decoration-indigo-200 underline decoration-2 underline-offset-4 leading-tight">Cargando...</h2>
+                    <input type="text" id="routine-title-input" onblur="window.saveDayName()" onkeydown="window.handleDayNameKeypress(event)" class="hidden text-2xl font-bold bg-transparent border-b-2 border-indigo-600 w-full focus:outline-none text-gray-800" />
+                </div>
+                <button id="btn-start-training" onclick="window.toggleTrainingMode()" class="px-3 py-2 rounded-lg text-xs font-bold bg-emerald-500 text-white shadow-sm">Iniciar</button>
+                <button onclick="window.deleteCurrentDay()" class="p-2 rounded-lg text-red-400 bg-white border border-gray-100 shadow-sm"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+            </div>
+            <div id="routine-list" class="space-y-4 pb-4"></div>
+            <button onclick="window.openAddExerciseModal()" class="w-full py-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 mb-8">+ Agregar Ejercicio</button>
+        </main>
+    </div>
+
+    <!-- LOADER -->
+    <div id="app-loader" class="fixed inset-0 bg-gray-100 flex flex-col items-center justify-center z-[100]">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600 mb-4"></div>
+    </div>
+
+    <!-- MODALES -->
+    <div id="new-program-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl">
+            <h3 class="text-lg font-bold mb-4">Nueva Rutina</h3>
+            <input type="text" id="new-program-name" class="w-full p-3 bg-gray-50 border rounded-xl mb-4" placeholder="Nombre de la rutina">
+            <div class="flex gap-3">
+                <button onclick="window.closeNewProgramModal()" class="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
+                <button onclick="window.createNewProgram()" class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl">Crear</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-exercise-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-xs">
+            <h3 class="font-bold text-lg mb-4">Agregar Ejercicio</h3>
+            <div class="space-y-3">
+                <input type="text" id="add-exercise-name" class="w-full p-3 bg-gray-50 rounded-xl border" placeholder="Nombre (ej: Press Banca)">
+                <div class="flex gap-3">
+                    <input type="text" id="add-sets" class="w-full p-3 bg-gray-50 rounded-xl border text-center" placeholder="Series">
+                    <input type="text" id="add-reps" class="w-full p-3 bg-gray-50 rounded-xl border text-center" placeholder="Reps">
+                </div>
+                <input type="number" id="add-rest-seconds" class="w-full p-3 bg-gray-50 rounded-xl border text-center" placeholder="Descanso (segundos)" value="90" min="10" step="5">
+                <textarea id="add-help-text" class="w-full p-3 bg-gray-50 rounded-xl border resize-none" placeholder="Notas de ayuda..."></textarea>
+                <button onclick="window.confirmAddExercise()" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Agregar</button>
+                <button onclick="window.closeAddExerciseModal()" class="w-full py-2 text-gray-400 font-bold">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-exercise-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-xs">
+            <h3 class="font-bold text-lg mb-4">Editar Ejercicio</h3>
+            <div class="space-y-3">
+                <input type="text" id="edit-exercise-name" class="w-full p-3 bg-gray-50 rounded-xl border">
+                <div class="flex gap-3">
+                    <input type="text" id="edit-sets" class="w-full p-3 bg-gray-50 rounded-xl border text-center">
+                    <input type="text" id="edit-reps" class="w-full p-3 bg-gray-50 rounded-xl border text-center">
+                </div>
+                <input type="number" id="edit-rest-seconds" class="w-full p-3 bg-gray-50 rounded-xl border text-center" min="10" step="5">
+                <textarea id="edit-help-text" class="w-full p-3 bg-gray-50 rounded-xl border resize-none"></textarea>
+                <button onclick="window.saveEditedExercise()" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Guardar</button>
+                <button onclick="window.closeEditModal()" class="w-full py-2 text-gray-400 font-bold">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-6">
+        <div class="bg-white w-full sm:max-w-xs h-[70vh] sm:rounded-2xl rounded-t-3xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                <h3 id="history-title" class="font-bold text-lg text-gray-800 truncate pr-4">Historial</h3>
+                <button onclick="window.closeHistoryModal()" class="w-8 h-8 flex items-center justify-center bg-gray-200 rounded-full text-gray-500 font-bold">✕</button>
+            </div>
+            <div id="history-content" class="flex-1 overflow-y-auto no-scrollbar bg-white"></div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-8">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-xs text-center">
+            <div class="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">⚠️</div>
+            <p id="confirm-message" class="text-gray-800 font-medium mb-6">¿Seguro?</p>
+            <div class="flex gap-3">
+                <button id="confirm-no" class="flex-1 py-2.5 text-gray-600 font-bold bg-gray-100 rounded-xl">No</button>
+                <button id="confirm-yes" class="flex-1 py-2.5 bg-red-500 text-white font-bold rounded-xl shadow-lg">Sí</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rest-timer" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-[75] bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl w-[90%] max-w-xs">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs uppercase tracking-wider text-gray-300 font-bold">Descanso</span>
+            <button onclick="window.stopRestTimer()" class="text-xs text-gray-300">Saltar</button>
+        </div>
+        <div id="rest-timer-value" class="text-2xl font-black text-center">00:00</div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 left-4 right-4 z-[70] pointer-events-none flex flex-col gap-2 items-center"></div>
+
+    <script>
+        const APP_KEY = 'gym_tracker_v1';
+        let appData = { programs: [], days: {} };
+        let currentProgramId = null;
+        let currentDayId = null;
+        let currentEditingExId = null;
+        let sortableInstance = null;
+        let daysSortableInstance = null;
+        let confirmCallback = null;
+        let restTimerInterval = null;
+
+        window.toggleFullScreen = function() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+            window.toggleMenu();
+        };
+
+        window.getHistoryWeight = function(v) {
+            if(!v) return null;
+            if(Array.isArray(v)) {
+                const last = v[v.length - 1];
+                return last.weight || '';
+            }
+            if(typeof v === 'object') return v.weight || '';
+            return v;
+        };
+        window.getHistoryNote = function(v) {
+            if(Array.isArray(v)) {
+                const last = v[v.length - 1];
+                return last.note || '';
+            }
+            return (v && typeof v === 'object') ? v.note : '';
+        };
+        window.formatDate = function(ts) {
+            if(!ts) return '';
+            const d = new Date(ts);
+            return `(${d.getDate()}/${d.getMonth()+1})`;
+        };
+
+        window.loadData = function() {
+            const saved = localStorage.getItem(APP_KEY);
+            if (saved) { try { appData = JSON.parse(saved); } catch(e) { console.error(e); } }
+            if (!appData.programs || appData.programs.length === 0) {
+                const now = Date.now();
+                const progId = 'p_' + now;
+                const dayId = 'd_' + now;
+                appData.programs = [{ id: progId, name: "Mi Rutina", isActive: true, createdAt: now }];
+                appData.days[progId] = [{ id: dayId, name: "Día 1", createdAt: now, exercises: [
+                    { id: 'e_1', name: 'Sentadilla', sets: '4', reps: '10', helpText: '', history: {} },
+                    { id: 'e_2', name: 'Press Banca', sets: '4', reps: '10', helpText: '', history: {} }
+                ]}];
+                window.saveData();
+            }
+            appData.programs.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+            const active = appData.programs.find(p => p.isActive) || appData.programs[0];
+            window.switchProgram(active.id, false);
+        };
+
+        window.saveData = function() { localStorage.setItem(APP_KEY, JSON.stringify(appData)); };
+
+        window.switchProgram = function(id, setAsActive = false) {
+            if (window.stopRestTimer) window.stopRestTimer();
+            currentProgramId = id;
+            if (setAsActive) {
+                appData.programs.forEach(p => p.isActive = (p.id === id));
+                window.saveData();
+                window.showToast("Rutina marcada como Activa");
+            }
+            window.renderProgramSelector();
+            const days = appData.days[id] || [];
+            days.sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0));
+            if (days.length > 0) { currentDayId = days.find(d => d.id === currentDayId) ? currentDayId : days[0].id; }
+            else { currentDayId = null; }
+            window.renderDaysNav();
+            window.renderRoutine();
+        };
+
+        window.renderProgramSelector = function() {
+            const sel = document.getElementById('program-selector');
+            if(!sel) return;
+            sel.innerHTML = appData.programs.map(p => `<option value="${p.id}">${p.name} ${window.formatDate(p.createdAt)}</option>`).join('');
+            sel.value = currentProgramId;
+            const currentProgram = appData.programs.find(p => p.id === currentProgramId);
+            const act = currentProgram?.isActive;
+            const programNameDisplay = document.getElementById('program-name-display');
+            const programNameInput = document.getElementById('program-name-input');
+            const programName = currentProgram?.name || 'Tu Rutina';
+            if (programNameDisplay) programNameDisplay.textContent = programName;
+            if (programNameInput) programNameInput.value = programName;
+            document.getElementById('badge-active').classList.toggle('hidden', !act);
+            document.getElementById('btn-make-active').classList.toggle('hidden', !!act);
+        };
+
+        window.renderDaysNav = function() {
+            const nav = document.getElementById('days-navigation');
+            if(!nav) return;
+            const days = appData.days[currentProgramId] || [];
+            nav.innerHTML = days.map(d => `<button data-day-id="${d.id}" onclick="window.switchDay('${d.id}')" class="day-chip whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-bold ${d.id === currentDayId ? 'bg-gray-900 text-white shadow-md' : 'bg-white border text-gray-600'}">${d.name}</button>`).join('') + `<button data-day-add="1" onclick="window.addNewDay()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-lg border border-gray-200 ml-1 flex-shrink-0">+</button>`;
+
+            if (daysSortableInstance) {
+                try { daysSortableInstance.destroy(); } catch (e) { console.warn('Day Sortable destroy bypassed'); }
+                daysSortableInstance = null;
+            }
+            if (typeof Sortable !== 'undefined') {
+                daysSortableInstance = new Sortable(nav, {
+                    animation: 150,
+                    draggable: '.day-chip',
+                    onEnd: window.reorderDays
+                });
+            }
+        };
+
+        window.reorderDays = function() {
+            const nav = document.getElementById('days-navigation');
+            if(!nav || !currentProgramId) return;
+            const ids = Array.from(nav.querySelectorAll('[data-day-id]')).map(el => el.dataset.dayId);
+            const days = appData.days[currentProgramId] || [];
+            days.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+            window.saveData();
+            window.renderDaysNav();
+        };
+
+        window.switchDay = function(id) { currentDayId = id; if (window.stopRestTimer) window.stopRestTimer(); window.renderDaysNav(); window.renderRoutine(); };
+
+        window.addNewDay = function() {
+            if (!currentProgramId) return;
+            const now = Date.now();
+            const newDay = { id: 'd_' + now, name: "Nuevo Día", createdAt: now, exercises: [] };
+            if (!appData.days[currentProgramId]) appData.days[currentProgramId] = [];
+            appData.days[currentProgramId].push(newDay);
+            window.saveData();
+            window.switchDay(newDay.id);
+            window.showToast("Día agregado");
+        };
+
+        window.getTrainingState = function(day) {
+            if (!day) return null;
+            if (!day.training) {
+                day.training = { running: false, activeExerciseId: null, setsDone: {}, skipped: [], lastWeight: {} };
+            }
+            if (!day.training.setsDone) day.training.setsDone = {};
+            if (!day.training.skipped) day.training.skipped = [];
+            if (!day.training.lastWeight) day.training.lastWeight = {};
+            return day.training;
+        };
+
+        window.getExerciseTargetSets = function(ex) {
+            const parsed = parseInt(ex.sets, 10);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+        };
+
+        window.getNextExerciseId = function(day, state, fromIdx = -1) {
+            for (let i = fromIdx + 1; i < day.exercises.length; i++) {
+                const ex = day.exercises[i];
+                const done = state.setsDone[ex.id] || 0;
+                const target = window.getExerciseTargetSets(ex);
+                if (!state.skipped.includes(ex.id) && done < target) return ex.id;
+            }
+            return null;
+        };
+
+        window.toggleTrainingMode = function() {
+            const day = window.getCurrentDay();
+            if (!day) return;
+            const state = window.getTrainingState(day);
+            if (state.running) {
+                state.running = false;
+                state.activeExerciseId = null;
+                window.stopRestTimer();
+                window.saveData();
+                window.renderRoutine();
+                window.showToast('Entrenamiento finalizado');
+                return;
+            }
+            state.running = true;
+            state.activeExerciseId = window.getNextExerciseId(day, state, -1);
+            if (!state.activeExerciseId) {
+                window.showToast('No hay ejercicios pendientes');
+                state.running = false;
+            } else {
+                window.showToast('Entrenamiento iniciado');
+            }
+            window.saveData();
+            window.renderRoutine();
+        };
+
+        window.skipCurrentExercise = function(exId) {
+            const day = window.getCurrentDay();
+            if (!day) return;
+            const state = window.getTrainingState(day);
+            if (!state.running) return;
+            if (!state.skipped.includes(exId)) state.skipped.push(exId);
+            const currentIndex = day.exercises.findIndex(e => e.id === exId);
+            state.activeExerciseId = window.getNextExerciseId(day, state, currentIndex);
+            if (!state.activeExerciseId) {
+                state.running = false;
+                window.showToast('Entrenamiento completo');
+            } else {
+                window.showToast('Ejercicio salteado');
+            }
+            window.saveData();
+            window.renderRoutine();
+        };
+
+        window.startRestTimer = function(seconds) {
+            window.stopRestTimer(false);
+            const timer = document.getElementById('rest-timer');
+            const value = document.getElementById('rest-timer-value');
+            if (!timer || !value) return;
+            const total = Math.max(10, parseInt(seconds || 90, 10));
+            const end = Date.now() + (total * 1000);
+            timer.classList.remove('hidden');
+
+            const tick = () => {
+                const remainingMs = end - Date.now();
+                const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+                const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+                const ss = String(remaining % 60).padStart(2, '0');
+                value.textContent = `${mm}:${ss}`;
+                if (remaining <= 0) {
+                    window.stopRestTimer(false);
+                    window.showToast('Descanso terminado');
+                    if (navigator.vibrate) navigator.vibrate(200);
+                }
+            };
+            tick();
+            restTimerInterval = setInterval(tick, 250);
+        };
+
+        window.stopRestTimer = function(showToast = false) {
+            if (restTimerInterval) {
+                clearInterval(restTimerInterval);
+                restTimerInterval = null;
+            }
+            const timer = document.getElementById('rest-timer');
+            if (timer) timer.classList.add('hidden');
+            if (showToast) window.showToast('Descanso cancelado');
+        };
+
+        window.renderRoutine = function() {
+            const list = document.getElementById('routine-list');
+            const titleDisplay = document.getElementById('routine-title-display');
+            const startBtn = document.getElementById('btn-start-training');
+            if(!list || !titleDisplay) return;
+
+            if (sortableInstance) {
+                try { sortableInstance.destroy(); } catch (e) { console.warn("Sortable destroy bypassed"); }
+                sortableInstance = null;
+            }
+
+            const day = window.getCurrentDay();
+            titleDisplay.textContent = day ? day.name : "Sin Días";
+            list.innerHTML = '';
+            if (!day) return;
+
+            const training = window.getTrainingState(day);
+            if (startBtn) {
+                startBtn.textContent = training.running ? 'Finalizar' : 'Iniciar';
+                startBtn.classList.toggle('bg-emerald-500', !training.running);
+                startBtn.classList.toggle('bg-amber-500', training.running);
+            }
+
+            if (day.exercises.length === 0) {
+                list.innerHTML = `<div class="text-center py-10 text-gray-400">Sin ejercicios</div>`;
+                return;
+            }
+
+            day.exercises.forEach((ex, exIndex) => {
+                const dates = Object.keys(ex.history || {}).sort((a,b) => new Date(b) - new Date(a));
+                const latestDate = dates.length > 0 ? dates[0] : null;
+                const latestEntry = latestDate ? ex.history[latestDate] : null;
+                const latestWeight = window.getHistoryWeight(latestEntry) || '';
+                const latestDateFmt = latestDate ? latestDate.split('-').slice(1).reverse().join('/') : '';
+                const hasHelp = ex.helpText && ex.helpText.trim().length > 0;
+                const doneSets = training.setsDone[ex.id] || 0;
+                const targetSets = window.getExerciseTargetSets(ex);
+                const isSkipped = training.skipped.includes(ex.id);
+                const isDone = doneSets >= targetSets;
+                const isActive = training.running && training.activeExerciseId === ex.id;
+                const statusText = training.running
+                    ? (isSkipped ? 'SALTEADO' : (isDone ? 'COMPLETO' : (isActive ? 'ACTIVO' : 'PENDIENTE')))
+                    : '';
+                const statusClass = isSkipped
+                    ? 'bg-gray-200 text-gray-600'
+                    : (isDone ? 'bg-emerald-100 text-emerald-700' : (isActive ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-500'));
+
+                const div = document.createElement('div');
+                div.setAttribute('data-id', ex.id);
+                div.className = `bg-white p-4 rounded-2xl border shadow-sm relative group ${isActive ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-gray-100'} ${isSkipped ? 'opacity-70' : ''}`;
+
+                const prevHtml = (latestWeight && latestWeight.trim() !== '')
+                    ? `<div class="mt-2 inline-flex items-center bg-gray-100 px-2 py-1 rounded-md border border-gray-200"><span class="text-xs text-gray-500 font-bold mr-1">PREV:</span><span class="text-sm font-black text-gray-700">${latestWeight}</span><span class="text-[10px] text-gray-400 ml-1">(${latestDateFmt})</span></div>`
+                    : '';
+
+                const trainingInfo = training.running
+                    ? `<div class="mt-1 text-[11px] font-bold text-gray-500">Serie ${Math.min(doneSets + 1, targetSets)}/${targetSets} · Descanso ${ex.restSeconds || 90}s</div>`
+                    : '';
+
+                const trainingActions = isActive
+                    ? `<div class="flex gap-2 mt-2"><button onclick="window.skipCurrentExercise('${ex.id}')" class="px-2 py-1 text-xs font-bold rounded-lg bg-gray-100 text-gray-600">Saltar</button></div>`
+                    : '';
+
+                const defaultWeight = training.running && isActive ? (training.lastWeight[ex.id] || '') : '';
+                const repsPlaceholder = training.running ? `Reps (objetivo ${ex.reps || '-'})` : 'Notas...';
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-start gap-2 pr-2">
+                            <div class="drag-handle text-gray-300 pt-1 -ml-1 cursor-grab"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg></div>
+                            <div>
+                                <h3 class="text-lg font-black text-gray-800 leading-tight">${ex.name}</h3>
+                                <p class="text-xs text-gray-400 font-bold mt-0.5 uppercase tracking-wide">${ex.sets} X ${ex.reps}</p>
+                                ${hasHelp ? `<button onclick="window.toggleHelpText('${ex.id}')" class="text-xs text-indigo-400 font-bold mt-1">INFO</button><div id="help-text-${ex.id}" class="hidden mt-1 p-2 bg-indigo-50 rounded-lg text-xs italic">${ex.helpText}</div>` : ''}
+                                ${prevHtml}
+                                ${trainingInfo}
+                            </div>
+                        </div>
+                        <div class="flex gap-1 items-center">
+                            ${training.running ? `<span class="px-2 py-1 text-[10px] font-bold rounded-full ${statusClass}">${statusText}</span>` : ''}
+                            <button onclick="window.renderHistoryModal('${ex.id}')" class="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
+                            <button onclick="window.openEditModal('${ex.id}')" class="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                            <button onclick="window.initiateDelete('${ex.id}')" class="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <div class="w-28"><input type="text" inputmode="decimal" id="w_${ex.id}" value="${defaultWeight}" placeholder="Peso..." class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold"></div>
+                        <div class="flex-1"><input type="text" id="n_${ex.id}" value="" placeholder="${repsPlaceholder}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"></div>
+                        <button onclick="window.saveWeight('${ex.id}')" class="w-12 h-12 ${isActive ? 'bg-emerald-600' : 'bg-indigo-600'} text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 transition-all"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></button>
+                    </div>
+                    ${trainingActions}
+                `;
+                list.appendChild(div);
+            });
+
+            if (typeof Sortable !== 'undefined') {
+                sortableInstance = new Sortable(list, { handle: '.drag-handle', animation: 150, onEnd: window.reorderExercises });
+            }
+        };
+
+        window.saveWeight = function(exId) {
+            const day = window.getCurrentDay();
+            const ex = day ? day.exercises.find(e => e.id === exId) : null;
+            if(!ex) return;
+            const inW = document.getElementById('w_' + exId);
+            const inN = document.getElementById('n_' + exId);
+            let val = (inW?.value || '').trim();
+            const today = new Date().toISOString().split('T')[0];
+            const training = window.getTrainingState(day);
+
+            if (val && /^[0-9]+([.,][0-9]+)?$/.test(val)) val += ' kg';
+
+            if (training.running) {
+                if (training.activeExerciseId !== exId) {
+                    window.showToast('Completá primero el ejercicio activo');
+                    return;
+                }
+                const repsValue = (inN?.value || '').trim() || ex.reps || '';
+                const weightValue = val || training.lastWeight[exId] || '';
+                if (!weightValue) {
+                    window.showToast('Ingresá un peso para la primera serie');
+                    return;
+                }
+                training.lastWeight[exId] = weightValue;
+
+                let existing = ex.history[today];
+                const nextEntry = { weight: weightValue, reps: repsValue, note: repsValue ? `Reps: ${repsValue}` : '' };
+                if (!existing) ex.history[today] = nextEntry;
+                else if (Array.isArray(existing)) existing.push(nextEntry);
+                else ex.history[today] = [existing, nextEntry];
+
+                training.setsDone[exId] = (training.setsDone[exId] || 0) + 1;
+                const target = window.getExerciseTargetSets(ex);
+                const currentIndex = day.exercises.findIndex(e => e.id === exId);
+                if (training.setsDone[exId] >= target) {
+                    training.activeExerciseId = window.getNextExerciseId(day, training, currentIndex);
+                    if (!training.activeExerciseId) {
+                        training.running = false;
+                        window.showToast('Entrenamiento completo');
+                        window.stopRestTimer();
+                    }
+                }
+
+                window.startRestTimer(ex.restSeconds || 90);
+                window.commitSave(inW, inN, { keepWeight: true, rerenderDelay: 150 });
+                return;
+            }
+
+            const note = (inN?.value || '').trim();
+            if (!val && !note) {
+                if (ex.history && ex.history[today] && !Array.isArray(ex.history[today])) {
+                    window.showConfirm('¿Eliminar registro de hoy?', (yes) => {
+                        if(yes) {
+                            delete ex.history[today];
+                            window.saveData();
+                            window.renderRoutine();
+                        }
+                    });
+                }
+            } else {
+                let existing = ex.history[today];
+                if (existing) {
+                    window.showConfirm('¿Agregar como SERIE EXTRA (Sí) o Corregir última (No)?', (add) => {
+                         if (add) {
+                             if (!Array.isArray(existing)) existing = [existing];
+                             existing.push({ weight: val, note: note });
+                             ex.history[today] = existing;
+                         } else {
+                             if (Array.isArray(existing)) {
+                                 existing[existing.length - 1] = { weight: val, note: note };
+                             } else {
+                                 ex.history[today] = { weight: val, note: note };
+                             }
+                         }
+                         window.commitSave(inW, inN);
+                    });
+                } else {
+                    ex.history[today] = { weight: val, note: note };
+                    window.commitSave(inW, inN);
+                }
+            }
+        };
+
+        window.commitSave = function(inputW, inputN, options = {}) {
+            window.showToast('Guardado');
+            if (!options.keepWeight && inputW) inputW.value = '';
+            if (inputN) inputN.value = '';
+
+            const container = inputW ? inputW.closest('.flex.gap-2.items-center') : null;
+            const btn = container ? container.querySelector('button') : null;
+            if(btn) {
+                btn.classList.add('bg-green-500', 'scale-110');
+                setTimeout(() => {
+                    btn.classList.remove('bg-green-500', 'scale-110');
+                    window.renderRoutine();
+                }, options.rerenderDelay || 800);
+            } else {
+                window.renderRoutine();
+            }
+            window.saveData();
+        };
+
+        window.renderHistoryModal = function(exId) {
+            const ex = window.getCurrentDay()?.exercises.find(e => e.id === exId);
+            if(!ex) return;
+            document.getElementById('history-title').textContent = ex.name;
+            const content = document.getElementById('history-content');
+            content.innerHTML = '';
+
+            const dates = Object.keys(ex.history || {}).sort((a,b) => new Date(b) - new Date(a));
+
+            if (dates.length === 0) content.innerHTML = '<p class="p-6 text-gray-400 text-center">Sin historial</p>';
+            else dates.forEach(d => {
+                let rawEntry = ex.history[d];
+                let entries = Array.isArray(rawEntry) ? rawEntry : [rawEntry];
+                const reversedEntries = [...entries].reverse();
+
+                reversedEntries.forEach((entry, idx) => {
+                    const originalIdx = entries.length - 1 - idx;
+                    const isMulti = entries.length > 1;
+                    const indexLabel = isMulti ? ` #${entries.length - idx}` : '';
+
+                    const div = document.createElement('div');
+                    div.className = "p-4 border-b flex justify-between items-center";
+                    div.innerHTML = `
+                        <div>
+                            <div class="text-[10px] text-gray-400 uppercase font-bold">${d}${indexLabel}</div>
+                            <div class="font-black text-lg text-gray-800">${entry.weight || '-'}</div>
+                            ${entry.note ? `<div class="text-xs text-yellow-600 italic mt-1 font-medium">📝 ${entry.note}</div>` : ''}
+                        </div>
+                        <button class="text-gray-300 hover:text-red-500 px-2 transition-colors">✕</button>
+                    `;
+                    const passIdx = Array.isArray(rawEntry) ? originalIdx : null;
+                    div.querySelector('button').onclick = () => window.deleteHistoryItem(exId, d, passIdx);
+                    content.appendChild(div);
+                });
+            });
+            document.getElementById('history-modal').classList.remove('hidden');
+        };
+
+        window.deleteHistoryItem = function(exId, date, idx) {
+            window.showConfirm("¿Borrar este registro?", (yes) => {
+                if(yes) {
+                    const ex = window.getCurrentDay().exercises.find(e => e.id === exId);
+                    if(ex && ex.history[date]) {
+                        if (idx !== null && Array.isArray(ex.history[date])) {
+                            ex.history[date].splice(idx, 1);
+                            if (ex.history[date].length === 0) delete ex.history[date];
+                        } else {
+                            delete ex.history[date];
+                        }
+                        window.saveData();
+                        window.renderHistoryModal(exId);
+                        window.renderRoutine();
+                    }
+                }
+            });
+        };
+
+        window.editDayName = () => {
+            const disp = document.getElementById('routine-title-display');
+            const inp = document.getElementById('routine-title-input');
+            if(disp && inp) {
+                inp.value = disp.textContent;
+                disp.classList.add('hidden');
+                inp.classList.remove('hidden');
+                inp.focus();
+            }
+        };
+
+        window.saveDayName = () => {
+            const day = window.getCurrentDay();
+            const inp = document.getElementById('routine-title-input');
+            const disp = document.getElementById('routine-title-display');
+            if (day && inp && disp) {
+                day.name = inp.value.trim() || day.name;
+                window.saveData();
+                window.renderDaysNav();
+                window.renderRoutine();
+                disp.classList.remove('hidden');
+                inp.classList.add('hidden');
+            }
+        };
+
+        window.handleDayNameKeypress = (e) => { if(e.key === 'Enter') window.saveDayName(); };
+
+        window.getCurrentDay = () => (currentProgramId && currentDayId) ? appData.days[currentProgramId]?.find(d => d.id === currentDayId) : null;
+        window.handleProgramChange = (e) => window.switchProgram(e.target.value);
+        window.toggleMenu = () => document.getElementById('app-menu').classList.toggle('hidden');
+
+        window.editProgramName = () => {
+            const program = appData.programs.find(p => p.id === currentProgramId);
+            const display = document.getElementById('program-name-display');
+            const input = document.getElementById('program-name-input');
+            if (!program || !display || !input) return;
+            input.value = program.name || display.textContent;
+            display.classList.add('hidden');
+            input.classList.remove('hidden');
+            input.focus();
+            input.select();
+        };
+
+        window.saveProgramName = () => {
+            const program = appData.programs.find(p => p.id === currentProgramId);
+            const display = document.getElementById('program-name-display');
+            const input = document.getElementById('program-name-input');
+            if (!program || !display || !input) return;
+
+            const nextName = input.value.trim();
+            if (nextName) {
+                program.name = nextName;
+                window.saveData();
+                window.renderProgramSelector();
+                window.showToast('Nombre de rutina actualizado');
+            } else {
+                input.value = program.name;
+            }
+
+            display.classList.remove('hidden');
+            input.classList.add('hidden');
+        };
+
+        window.handleProgramNameKeypress = (e) => {
+            if (e.key === 'Enter') window.saveProgramName();
+        };
+
+        window.cloneCurrentProgram = () => {
+            const sourceProgram = appData.programs.find(p => p.id === currentProgramId);
+            if (!sourceProgram) return;
+
+            const sourceDays = appData.days[currentProgramId] || [];
+            const now = Date.now();
+            const cloneId = 'p_' + now;
+            const cloneDays = sourceDays.map((day, dayIndex) => ({
+                ...day,
+                id: `d_${now}_${dayIndex}`,
+                createdAt: now + dayIndex,
+                exercises: (day.exercises || []).map((exercise, exerciseIndex) => ({
+                    ...exercise,
+                    id: `e_${now}_${dayIndex}_${exerciseIndex}`,
+                    history: {}
+                }))
+            }));
+
+            appData.programs.forEach(p => p.isActive = false);
+            appData.programs.unshift({
+                id: cloneId,
+                name: `${sourceProgram.name} (copia)`,
+                isActive: true,
+                createdAt: now
+            });
+            appData.days[cloneId] = cloneDays;
+            window.saveData();
+            window.switchProgram(cloneId, true);
+            window.toggleMenu();
+            window.showToast('Rutina clonada');
+        };
+
+        window.closeHistoryModal = () => document.getElementById('history-modal').classList.add('hidden');
+        window.openNewProgramModal = () => document.getElementById('new-program-modal').classList.remove('hidden');
+        window.closeNewProgramModal = () => document.getElementById('new-program-modal').classList.add('hidden');
+        window.createNewProgram = () => { const n = document.getElementById('new-program-name').value.trim(); if(!n) return; const id = 'p_'+Date.now(); appData.programs.unshift({id, name:n, isActive:true, createdAt:Date.now()}); appData.days[id] = [{id:'d_'+Date.now(), name:'Día 1', createdAt:Date.now(), exercises:[]}]; window.saveData(); window.closeNewProgramModal(); window.switchProgram(id, true); };
+        window.deleteCurrentProgram = () => { window.showConfirm("¿Borrar toda la rutina?", (y) => { if(y) { appData.programs = appData.programs.filter(p => p.id !== currentProgramId); delete appData.days[currentProgramId]; window.saveData(); window.loadData(); }}); };
+        window.deleteCurrentDay = () => { window.showConfirm("¿Borrar este día?", (y) => { if(y) { appData.days[currentProgramId] = appData.days[currentProgramId].filter(d => d.id !== currentDayId); window.saveData(); window.switchProgram(currentProgramId); }}); };
+        window.openAddExerciseModal = () => document.getElementById('add-exercise-modal').classList.remove('hidden');
+        window.closeAddExerciseModal = () => document.getElementById('add-exercise-modal').classList.add('hidden');
+        window.confirmAddExercise = () => { const n = document.getElementById('add-exercise-name').value.trim(); if(!n) return; const day = window.getCurrentDay(); const rest = parseInt(document.getElementById('add-rest-seconds').value, 10) || 90; if(day) { day.exercises.push({id:'e_'+Date.now(), name:n, sets:document.getElementById('add-sets').value, reps:document.getElementById('add-reps').value, restSeconds: rest, helpText:document.getElementById('add-help-text').value, history:{}}); window.saveData(); window.closeAddExerciseModal(); window.renderRoutine(); }};
+        window.openEditModal = (id) => { currentEditingExId = id; const ex = window.getCurrentDay()?.exercises.find(e => e.id === id); if(ex){ document.getElementById('edit-exercise-name').value = ex.name; document.getElementById('edit-sets').value = ex.sets; document.getElementById('edit-reps').value = ex.reps; document.getElementById('edit-rest-seconds').value = ex.restSeconds || 90; document.getElementById('edit-help-text').value = ex.helpText; document.getElementById('edit-exercise-modal').classList.remove('hidden'); }};
+        window.closeEditModal = () => document.getElementById('edit-exercise-modal').classList.add('hidden');
+        window.saveEditedExercise = () => { const ex = window.getCurrentDay()?.exercises.find(e => e.id === currentEditingExId); if(ex) { ex.name = document.getElementById('edit-exercise-name').value; ex.sets = document.getElementById('edit-sets').value; ex.reps = document.getElementById('edit-reps').value; ex.restSeconds = parseInt(document.getElementById('edit-rest-seconds').value, 10) || 90; ex.helpText = document.getElementById('edit-help-text').value; window.saveData(); window.closeEditModal(); window.renderRoutine(); }};
+        window.initiateDelete = (id) => { window.showConfirm("¿Eliminar ejercicio?", (y) => { if(y) { const d = window.getCurrentDay(); d.exercises = d.exercises.filter(e => e.id !== id); window.saveData(); window.renderRoutine(); }}); };
+        window.toggleHelpText = (id) => document.getElementById('help-text-'+id).classList.toggle('hidden');
+        window.reorderExercises = () => { const list = document.getElementById('routine-list'); if(!list) return; const ids = Array.from(list.children).map(c => c.dataset.id); window.getCurrentDay().exercises.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id)); window.saveData(); };
+        window.showConfirm = (msg, cb) => { confirmCallback = cb; document.getElementById('confirm-message').textContent = msg; document.getElementById('confirm-modal').classList.remove('hidden'); };
+
+        const initConfirmEvents = () => {
+            const yes = document.getElementById('confirm-yes');
+            const no = document.getElementById('confirm-no');
+            if(yes) yes.onclick = () => { document.getElementById('confirm-modal').classList.add('hidden'); if(confirmCallback) confirmCallback(true); };
+            if(no) no.onclick = () => { document.getElementById('confirm-modal').classList.add('hidden'); if(confirmCallback) confirmCallback(false); };
+        };
+
+        window.setProgramActive = () => window.switchProgram(currentProgramId, true);
+        window.downloadBackup = () => { const data = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData)); const a = document.createElement('a'); a.href = data; a.download = "backup.json"; a.click(); };
+        window.restoreBackup = (e) => { const f = e.target.files[0]; const r = new FileReader(); r.onload = (ev) => { try { appData = JSON.parse(ev.target.result); window.saveData(); location.reload(); } catch(err){ alert("Error al restaurar"); } }; r.readAsText(f); };
+        window.showToast = (msg) => { const c = document.getElementById('toast-container'); if(!c) return; const e = document.createElement('div'); e.className = 'bg-gray-900 text-white text-xs px-4 py-2 rounded-full shadow-xl mb-2 opacity-100 transition-opacity duration-300'; e.textContent = msg; c.appendChild(e); setTimeout(() => { e.classList.add('opacity-0'); setTimeout(() => e.remove(), 300); }, 2000); };
+
+        window.init = function() {
+            window.loadData();
+            initConfirmEvents();
+            document.getElementById('app-loader').classList.add('hidden');
+        };
+
+        window.init();
+    </script>
+</body>
+</html>
