@@ -217,21 +217,49 @@
             window.toggleMenu();
         };
 
-        window.getHistoryWeight = function(v) {
-            if(!v) return null;
-            if(Array.isArray(v)) {
-                const last = v[v.length - 1];
-                return last.weight || '';
+        window.normalizeHistoryDayEntry = function(v) {
+            if (!v) return { weight: '', note: '', sets: [] };
+            if (Array.isArray(v)) {
+                const sets = v.map((entry) => ({
+                    weight: entry?.weight || '',
+                    reps: entry?.reps || '',
+                    note: entry?.note || ''
+                }));
+                const last = sets[sets.length - 1] || {};
+                return {
+                    weight: last.weight || '',
+                    note: last.note || '',
+                    sets
+                };
             }
-            if(typeof v === 'object') return v.weight || '';
-            return v;
+            if (typeof v === 'object') {
+                const nestedSets = Array.isArray(v.sets)
+                    ? v.sets.map((entry) => ({
+                        weight: entry?.weight || '',
+                        reps: entry?.reps || '',
+                        note: entry?.note || ''
+                    }))
+                    : [];
+                const sets = nestedSets.length > 0
+                    ? nestedSets
+                    : [{ weight: v.weight || '', reps: v.reps || '', note: v.note || '' }];
+                const last = sets[sets.length - 1] || {};
+                return {
+                    weight: v.weight || last.weight || '',
+                    note: v.note || last.note || '',
+                    sets
+                };
+            }
+            return { weight: v, note: '', sets: [{ weight: v, reps: '', note: '' }] };
+        };
+
+        window.getHistoryWeight = function(v) {
+            const normalized = window.normalizeHistoryDayEntry(v);
+            return normalized.weight || '';
         };
         window.getHistoryNote = function(v) {
-            if(Array.isArray(v)) {
-                const last = v[v.length - 1];
-                return last.note || '';
-            }
-            return (v && typeof v === 'object') ? v.note : '';
+            const normalized = window.normalizeHistoryDayEntry(v);
+            return normalized.note || '';
         };
         window.formatDate = function(ts) {
             if(!ts) return '';
@@ -504,6 +532,7 @@
 
                 const defaultWeight = training.running && isActive ? (training.lastWeight[ex.id] || '') : '';
                 const repsPlaceholder = training.running ? `Reps (objetivo ${ex.reps || '-'})` : 'Notas...';
+                const inputsReadOnly = training.running && !isActive;
 
                 div.innerHTML = `
                     <div class="flex justify-between items-start mb-3">
@@ -525,9 +554,9 @@
                         </div>
                     </div>
                     <div class="flex gap-2 items-center">
-                        <div class="w-28"><input type="text" inputmode="decimal" id="w_${ex.id}" value="${defaultWeight}" placeholder="Peso..." class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold"></div>
-                        <div class="flex-1"><input type="text" id="n_${ex.id}" value="" placeholder="${repsPlaceholder}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm"></div>
-                        <button onclick="window.saveWeight('${ex.id}')" class="w-12 h-12 ${isActive ? 'bg-emerald-600' : 'bg-indigo-600'} text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 transition-all"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></button>
+                        <div class="w-28"><input type="text" inputmode="decimal" id="w_${ex.id}" value="${defaultWeight}" placeholder="Peso..." ${inputsReadOnly ? 'readonly' : ''} class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold ${inputsReadOnly ? 'opacity-60' : ''}"></div>
+                        <div class="flex-1"><input type="text" id="n_${ex.id}" value="" placeholder="${repsPlaceholder}" ${inputsReadOnly ? 'readonly' : ''} class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm ${inputsReadOnly ? 'opacity-60' : ''}"></div>
+                        <button onclick="window.saveWeight('${ex.id}')" ${inputsReadOnly ? 'disabled' : ''} class="w-12 h-12 ${isActive ? 'bg-emerald-600' : 'bg-indigo-600'} text-white rounded-xl shadow-md flex items-center justify-center active:scale-95 transition-all ${inputsReadOnly ? 'opacity-50 cursor-not-allowed' : ''}"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></button>
                     </div>
                     ${trainingActions}
                 `;
@@ -551,24 +580,39 @@
 
             if (val && /^[0-9]+([.,][0-9]+)?$/.test(val)) val += ' kg';
 
+            const getDayRecord = () => {
+                const normalized = window.normalizeHistoryDayEntry(ex.history[today]);
+                const lastSet = normalized.sets[normalized.sets.length - 1] || {};
+                return {
+                    ...normalized,
+                    weight: normalized.weight || lastSet.weight || ''
+                };
+            };
+
             if (training.running) {
                 if (training.activeExerciseId !== exId) {
                     window.showToast('Completá primero el ejercicio activo');
                     return;
                 }
+
                 const repsValue = (inN?.value || '').trim() || ex.reps || '';
                 const weightValue = val || training.lastWeight[exId] || '';
                 if (!weightValue) {
                     window.showToast('Ingresá un peso para la primera serie');
                     return;
                 }
-                training.lastWeight[exId] = weightValue;
 
-                let existing = ex.history[today];
-                const nextEntry = { weight: weightValue, reps: repsValue, note: repsValue ? `Reps: ${repsValue}` : '' };
-                if (!existing) ex.history[today] = nextEntry;
-                else if (Array.isArray(existing)) existing.push(nextEntry);
-                else ex.history[today] = [existing, nextEntry];
+                training.lastWeight[exId] = weightValue;
+                const dayRecord = getDayRecord();
+                dayRecord.sets.push({
+                    weight: weightValue,
+                    reps: repsValue,
+                    note: repsValue ? `Reps: ${repsValue}` : '',
+                    at: Date.now()
+                });
+                dayRecord.weight = weightValue;
+                dayRecord.note = dayRecord.sets[dayRecord.sets.length - 1]?.note || '';
+                ex.history[today] = dayRecord;
 
                 training.setsDone[exId] = (training.setsDone[exId] || 0) + 1;
                 const target = window.getExerciseTargetSets(ex);
@@ -589,7 +633,7 @@
 
             const note = (inN?.value || '').trim();
             if (!val && !note) {
-                if (ex.history && ex.history[today] && !Array.isArray(ex.history[today])) {
+                if (ex.history && ex.history[today]) {
                     window.showConfirm('¿Eliminar registro de hoy?', (yes) => {
                         if(yes) {
                             delete ex.history[today];
@@ -599,24 +643,30 @@
                     });
                 }
             } else {
-                let existing = ex.history[today];
-                if (existing) {
+                let dayRecord = getDayRecord();
+                if (dayRecord.sets.length > 0) {
                     window.showConfirm('¿Agregar como SERIE EXTRA (Sí) o Corregir última (No)?', (add) => {
-                         if (add) {
-                             if (!Array.isArray(existing)) existing = [existing];
-                             existing.push({ weight: val, note: note });
-                             ex.history[today] = existing;
-                         } else {
-                             if (Array.isArray(existing)) {
-                                 existing[existing.length - 1] = { weight: val, note: note };
-                             } else {
-                                 ex.history[today] = { weight: val, note: note };
-                             }
-                         }
-                         window.commitSave(inW, inN);
+                        if (add) {
+                            dayRecord.sets.push({ weight: val || dayRecord.weight, reps: '', note, at: Date.now() });
+                        } else {
+                            dayRecord.sets[dayRecord.sets.length - 1] = {
+                                ...dayRecord.sets[dayRecord.sets.length - 1],
+                                weight: val || dayRecord.weight,
+                                note
+                            };
+                        }
+                        dayRecord.weight = dayRecord.sets[dayRecord.sets.length - 1]?.weight || dayRecord.weight;
+                        dayRecord.note = note;
+                        ex.history[today] = dayRecord;
+                        window.commitSave(inW, inN);
                     });
                 } else {
-                    ex.history[today] = { weight: val, note: note };
+                    dayRecord = {
+                        weight: val,
+                        note,
+                        sets: [{ weight: val, reps: '', note, at: Date.now() }]
+                    };
+                    ex.history[today] = dayRecord;
                     window.commitSave(inW, inN);
                 }
             }
@@ -652,29 +702,23 @@
 
             if (dates.length === 0) content.innerHTML = '<p class="p-6 text-gray-400 text-center">Sin historial</p>';
             else dates.forEach(d => {
-                let rawEntry = ex.history[d];
-                let entries = Array.isArray(rawEntry) ? rawEntry : [rawEntry];
-                const reversedEntries = [...entries].reverse();
-
-                reversedEntries.forEach((entry, idx) => {
-                    const originalIdx = entries.length - 1 - idx;
-                    const isMulti = entries.length > 1;
-                    const indexLabel = isMulti ? ` #${entries.length - idx}` : '';
-
-                    const div = document.createElement('div');
-                    div.className = "p-4 border-b flex justify-between items-center";
-                    div.innerHTML = `
-                        <div>
-                            <div class="text-[10px] text-gray-400 uppercase font-bold">${d}${indexLabel}</div>
-                            <div class="font-black text-lg text-gray-800">${entry.weight || '-'}</div>
-                            ${entry.note ? `<div class="text-xs text-yellow-600 italic mt-1 font-medium">📝 ${entry.note}</div>` : ''}
-                        </div>
-                        <button class="text-gray-300 hover:text-red-500 px-2 transition-colors">✕</button>
-                    `;
-                    const passIdx = Array.isArray(rawEntry) ? originalIdx : null;
-                    div.querySelector('button').onclick = () => window.deleteHistoryItem(exId, d, passIdx);
-                    content.appendChild(div);
-                });
+                const entry = window.normalizeHistoryDayEntry(ex.history[d]);
+                const setCount = entry.sets.length;
+                const repsValues = entry.sets.map(s => s.reps).filter(Boolean);
+                const repsSummary = repsValues.length > 0 ? repsValues.join(' / ') : '-';
+                const div = document.createElement('div');
+                div.className = "p-4 border-b flex justify-between items-center";
+                div.innerHTML = `
+                    <div>
+                        <div class="text-[10px] text-gray-400 uppercase font-bold">${d}</div>
+                        <div class="font-black text-lg text-gray-800">${entry.weight || '-'}</div>
+                        <div class="text-xs text-gray-500 mt-1">Series: ${setCount} · Reps: ${repsSummary}</div>
+                        ${entry.note ? `<div class="text-xs text-yellow-600 italic mt-1 font-medium">📝 ${entry.note}</div>` : ''}
+                    </div>
+                    <button class="text-gray-300 hover:text-red-500 px-2 transition-colors">✕</button>
+                `;
+                div.querySelector('button').onclick = () => window.deleteHistoryItem(exId, d, null);
+                content.appendChild(div);
             });
             document.getElementById('history-modal').classList.remove('hidden');
         };
