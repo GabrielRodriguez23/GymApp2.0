@@ -28,6 +28,7 @@
         input:focus, select:focus, textarea:focus { outline: 2px solid #4f46e5; outline-offset: -1px; }
         .sortable-ghost { opacity: 0.4; background-color: #e0e7ff; }
         .drag-handle { cursor: grab; touch-action: none; }
+        .day-drag-handle { cursor: grab; touch-action: none; }
         /* Ajuste para Notch en iPhone */
         body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
     </style>
@@ -324,7 +325,7 @@
             const nav = document.getElementById('days-navigation');
             if(!nav) return;
             const days = appData.days[currentProgramId] || [];
-            nav.innerHTML = days.map(d => `<button data-day-id="${d.id}" onclick="window.switchDay('${d.id}')" class="day-chip whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-bold ${d.id === currentDayId ? 'bg-gray-900 text-white shadow-md' : 'bg-white border text-gray-600'}">${d.name}</button>`).join('') + `<button data-day-add="1" onclick="window.addNewDay()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-lg border border-gray-200 ml-1 flex-shrink-0">+</button>`;
+            nav.innerHTML = days.map(d => `<button data-day-id="${d.id}" onclick="window.switchDay('${d.id}')" class="day-chip whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-bold ${d.id === currentDayId ? 'bg-gray-900 text-white shadow-md' : 'bg-white border text-gray-600'}"><span class="inline-flex items-center gap-2"><span class="day-drag-handle opacity-60">↕</span><span>${d.name}</span></span></button>`).join('') + `<button data-day-add="1" onclick="window.addNewDay()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-lg border border-gray-200 ml-1 flex-shrink-0">+</button>`;
 
             if (daysSortableInstance) {
                 try { daysSortableInstance.destroy(); } catch (e) { console.warn('Day Sortable destroy bypassed'); }
@@ -334,6 +335,7 @@
                 daysSortableInstance = new Sortable(nav, {
                     animation: 150,
                     draggable: '.day-chip',
+                    handle: '.day-drag-handle',
                     onEnd: window.reorderDays
                 });
             }
